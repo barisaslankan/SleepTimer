@@ -27,6 +27,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.barisaslankan.sleeptimer.util.toMinutes
+import java.util.concurrent.TimeUnit
 import kotlin.math.atan2
 import kotlin.math.cos
 import kotlin.math.roundToInt
@@ -38,13 +39,17 @@ fun CountDownScreen(
 ) {
     val state = countDownViewModel.state.collectAsState()
     val radius = 120.dp
+    var startAngle = 0.0
+    var totalTurns = 0
+    var lastPointerPosition: Offset? = null
     val touchPoint = remember { mutableStateOf(Offset(0f, -radius.value / 2)) }
 
     Box(
         modifier = Modifier.fillMaxSize(),
         contentAlignment = Alignment.Center
     ) {
-        CircularProgressIndicator(
+        if(!state.value.isTimerRunning){
+            CircularProgressIndicator(
             progress = { 1f },
             modifier = Modifier.size(radius * 2),
             strokeWidth = 12.dp,
@@ -55,27 +60,70 @@ fun CountDownScreen(
             modifier = Modifier.align(Alignment.Center),
             style = TextStyle(fontSize = 24.sp)
         )
+         Box(
+             modifier = Modifier
+                 .offset {
+                     val angle = atan2(touchPoint.value.y.toDouble(), touchPoint.value.x.toDouble())
+                     val x = (radius.toPx() * cos(angle)).toFloat()
+                     val y = (radius.toPx() * sin(angle)).toFloat()
+                     IntOffset(x.roundToInt(), y.roundToInt())
+                 }
+                 .size(32.dp)
+                 .clip(CircleShape)
+                 .background(Color.Blue)
+                 .pointerInput(Unit) {
+                     detectDragGestures(
+                         onDragStart = { lastPointerPosition = it },
+                         onDrag = { change, dragAmount ->
+                             change.consume()
+                             touchPoint.value += dragAmount
+                             val newPointerPosition = change.position
+                             lastPointerPosition?.let { lastPos ->
+                                 val initialAngle = atan2(lastPos.y, lastPos.x)
+                                 val finalAngle = atan2(newPointerPosition.y, newPointerPosition.x)
+                                 val angleChange = finalAngle - initialAngle
+                                 startAngle += angleChange
+                                 startAngle %= (2 * Math.PI)
+                                 val clockwiseRotation = angleChange > 0
+                                 if (clockwiseRotation) {
+                                     totalTurns++
+                                 } else {
+                                     totalTurns--
+                                 }
 
-        Box(
-            modifier = Modifier
-                .offset {
-                    val angle = atan2(touchPoint.value.y.toDouble(), touchPoint.value.x.toDouble())
-                    val x = (radius.toPx() * cos(angle)).toFloat()
-                    val y = (radius.toPx() * sin(angle)).toFloat()
-                    IntOffset(x.roundToInt(), y.roundToInt())
-                }
-                .size(32.dp)
-                .clip(CircleShape)
-                .background(Color.Blue)
-                .pointerInput(Unit) {
-                    detectDragGestures(
-                        onDrag = { change, dragAmount ->
-                            change.consume()
-                            touchPoint.value += dragAmount
-                        }
-                    )
-                }
-        )
+                                 val linearValue = totalTurns * 2 * Math.PI * radius.value
+
+                                 val newInitialTime = if (clockwiseRotation) {
+                                     state.value.initialTime + linearValue.toLong()
+                                 } else {
+                                     if(state.value.initialTime>=linearValue.toLong()){
+                                         state.value.initialTime - linearValue.toLong()
+                                     }else {
+                                         0L
+                                     }
+                                 }
+                                 countDownViewModel.setInitialTime(newInitialTime)
+                                 countDownViewModel.updateRemainingTime(newInitialTime)
+                             }
+                             lastPointerPosition = newPointerPosition
+                         }
+                     )
+                 }
+            )
+        }else {
+            val remainingMinutes = TimeUnit.MILLISECONDS.toMinutes(state.value.remainingTime)
+            val remainingSeconds = TimeUnit.MILLISECONDS.toSeconds(state.value.remainingTime) % 60
+            val formattedTime = "%02d:%02d".format(remainingMinutes, remainingSeconds)
+
+            Text(
+                text = formattedTime,
+                modifier = Modifier.align(Alignment.Center),
+                style = TextStyle(
+                    color = Color.Blue,
+                    fontSize = 40.sp
+                )
+            )
+        }
 
         Button(
             onClick = {
@@ -87,7 +135,6 @@ fun CountDownScreen(
             Text(text = if (state.value.isTimerRunning) "Stop" else "Start")
         }
     }
-
 }
 
 @Preview

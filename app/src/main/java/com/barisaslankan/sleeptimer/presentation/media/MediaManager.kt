@@ -10,7 +10,6 @@ class MediaManager(private val context: Context) {
     private val audioManager: AudioManager by lazy {
         context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
     }
-
     fun muteAllMedia() {
         audioManager.adjustStreamVolume(AudioManager.STREAM_MUSIC, AudioManager.ADJUST_MUTE, 0)
         mediaPlayer?.apply {
